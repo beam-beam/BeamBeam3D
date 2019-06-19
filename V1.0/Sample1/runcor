@@ -1,0 +1,12 @@
+#!/bin/bash -l
+
+#SBATCH -p debug
+#SBATCH -n 2
+#SBATCH -t 0:30:00
+#SBATCH -A m669
+#SBATCH -C haswell
+
+cd $SLURM_SUBMIT_DIR
+
+srun -n 2 ./xmain
+

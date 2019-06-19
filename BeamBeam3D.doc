@@ -1,0 +1,266 @@
+!----------------------------- COPYRIGHT -----------------------------------
+!        BeamBeam3D: A Three-Dimensional Beam-Beam Simulation Code.
+!
+!                     Lawrence Berkeley National Laboratory
+!                             Mailstop 71J
+!                         Berkeley, CA 94720, USA
+!
+!(c) Copyright, 2004 by the Regents of the University of California.
+!
+!This software was produced under U.S. Government contract 
+!by Lawrence Berkeley National Laboratory, which is operated by the University
+!of California for the U.S. Department of Energy.  Neither the Government
+!nor the University makes any warranty, express or implied, or assumes
+!any liability or responsibility for the use of this software.
+!
+!Unpublished -- rights reserved under Copyright Laws of the United States.
+!--------------------------------------------------------------------------
+! Version: 2.1
+!--------------------------------------------------------------------------
+! Author: Ji Qiang with Gaussian field from Miguel Furman.
+Ms 71 J, AFTD
+1 cyclotron Rd.
+Lawrence Berkeley National Laboratory
+Berkeley, CA 94720
+Email: jqiang@lbl.gov
+Tel: 510-495-2608
+!-------------------------------------------------------------------------
+Introduction:
+BeamBeam3D is a 3D parallel particle-in-cell code for modeling strong-strong or
+strong-weak beam-beam interactions in high energy ring colliders.
+The main features of the code include:
+1)strong-strong (S-S); weak-strong (W-S)
+2)Multiple-slice model for finite bunch length effects
+3)New algorithm -- integrated shifted Green function -- 
+efficiently models long-range parasitic collisions and large aspect ratio 
+4)Parallel particle-based decomposition to achieve perfect load balance
+5)Lorentz boost to handle crossing angle collisions
+6)Multi-IP collisions, varying phase adv,…
+7)Arbitrary closed-orbit separation (static or time-dep)
+8)Independent beam parameters for the 2 beams
+!-------------------------------------------------------------------------
+References: 
+1)"A Parallel Particle-In-Cell Model for Beam-Beam Interaction in
+High Energy Ring Colliders," by J. Qiang, M. A. Furman, and R. D. Ryne,
+to appear in J. Comp. Phys.
+http://amac.lbl.gov/~jiqiang/Papers/BeamBeam3d.pdf
+2)"Strong-Strong Beam-Beam Simulation Using a Green Function Approach,"
+Phys. Rev. Special Topics - Accelerators and Beams, vol. 5, 104402 (2002).
+!-------------------------------------------------------------------------
+! Comments: The coordinate of beam 1 is x,y,z right hand system.
+!           The coordinate of beam 2 is x,y,z left hand system.
+!           Beam 1 and beam 2 have the same transverse x, y but
+!           different longitudinal direction. This follow the
+!           notation of MAD. The coordinate system also follows
+!           MAD definition, i.e. x,px/p0,y,px/p0,z,delta p/p0. 
+!           The # of particles has to be multiple of
+!           the half processor. The # of grid has to be multiple
+!           of the half processor. For strong/weak beam-beam, the
+!           first beam has to be the strong beam, the second beam has
+!           to be the weak beam. For a strong-strong simulation, two groups of
+!           processors are used. In this case, npcol has to be a multiple
+!           of 2. For a strong-weak simulation, only one group of processor
+!           is used.
+! 03/29/10 J. Q. fixed an defect associated with the individual particle trajectory
+!          print out. The 54 test particles trajectory print out failed in 3D Beam-Beam case.
+! 06/02/08
+1) J. Q. fixed the bug with idblist, nbunch gt should be nbunch ge in AccSimulator.f90: 
+! 04/14/07 :: 
+!1) J. Q. fixed a bug in AccSimulator.f90 associated with the Bcharge2list, Bmass2list. 
+!2) J. Q. fixed a bug in Output.f90 assocated with my_rank=0, which is not on the same processor as myidy=0
+!3) J. Q. fixed a bug in Beambeam.f90 range initialization.
+----------------------------------------------------
+Input files: beam1.in and beam2.in
+-----------------------------------------------
+32 1 /Npcol, Nprow. Npcol has to >= 2. For single slice model, Nprow = 1.
+6 1000000 /phase space, number of particles
+128 128 32 /number of mesh grid in X, Y, and Z
+1 /number of slice for each bunch
+40000 /# of turns
+2 /type of initial distribution, "2" for Gaussian
+/parameters to define the initial distribution
+/sigma, beta, alpha, scale x, scale px, centroid x, centroid px
+0.176029425224375e-3 1.0 0.0 1.0 1.0 1.8e-5 0.0
+0.176029425224375e-3 1.0 0.0 1.0 1.0 0.0 0.0
+/rms bunch length, rms delta p/p0, alpha, scale, scale, centroid, centroid
+3.6 1.6e-3 0.0 1.0 1.0 0.0 0.0
+/# of particle per bunch, kinetic energy(eV), mass (eV), charge
+10.0e10 10.0e10 938.27231e6 1.0
+0.225 0.235 3.7e-4 /betatron tune x, y, and synchrotron tune
+0.0 0.0 /alpha x, alpha y
+1.0 1.0 /beta x, beta y
+0.0309863585448237e-6 0.0309863585448237e-6 /emittance x, emittance y 
+/damping time (turn) in x, y, z, and damping switch: 0 - no damping,
+/1 - use tauy (x input) and dampart to construct stochastic map, 
+/2 - use damping in x, y, z to construct stochastic map.
+1.0e9 0.0 0.0 0 
+/rms z, relative momentum spread (this line is obslete and no longer use)
+3.6 1.6e-3 
+/switch for sweeping: 0 - no sweeping; sweeping amplitude; and sweeping tune
+0 0.0 0.01 
+0 /switch for orbit feedback control: 0 - no feedback control.
+0 20 /switch of close orbit squeezing, # of turns to bring orbit to 0
+0.0 0.0 /x coordinate of close orbit, y coordinate of close orbit.
+1.0 1.0 /rms z, rms pz (no longer used)
+/crossing angle alpha, phi
+/alpha is the angle with respect to x on x-y plane,
+/phi is the angle with respect to s on s-x plane
+0.0 0.0 
+/switch for fixed computation domain, switch for variable slice among
+/collision points, switch for external linear map, switch for external
+/2nd order transfer map.
+0 0 1 0
+4 /# of collision points per turn
+/range of computation domain: xmin, xmax, ymin, ymax, zmin, zmax
+-5.0 5.0 -5.0 5.0 2.0 2.0
+2 5 /switch for PE group: 1 - 1 group, 2 - 2 group; type of s-w interaction.
+0.0 0.0 /x and y linear chromaticity
+0.0 /curvature of ring
+100000 /luminosity output frequency
+/# of bunches, # of steps per turn for a bunch to return to its initail location
+3 6 
+0 100.0 /flag for restart function, maximum time (secs) for outputing particle information 
+10 /number of turns to reset the initial distribution
+---------------------------------------------
+Map Input files: map2nd1.in and map2nd2.in:
+6x6 linear transfer matrix between each collision for each bunch
+from MAD output. 
+In this example, 3 bunches for collision points,
+the first 4 maps are for bunch 1, the second for bunch 2,
+the third for bunch 3.
+-------------------------------------------------
+0.895711760239413  0.444635179184927 0.0 0.0 0.0 0.0
+-0.444635179184927 0.895711760239413 0.0 0.0 0.0 0.0
+0.0 0.0  0.886203579231215 0.463296035119862 0.0 0.0
+0.0 0.0 -0.463296035119862 0.886203579231215 0.0 0.0
+0.0 0.0 0.0 0.0 1.0 0.0
+0.0 0.0 0.0 0.0 0.0 1.0
+0.895711760239413  0.444635179184927 0.0 0.0 0.0 0.0
+-0.444635179184927 0.895711760239413 0.0 0.0 0.0 0.0
+0.0 0.0  0.886203579231215 0.463296035119862 0.0 0.0
+0.0 0.0 -0.463296035119862 0.886203579231215 0.0 0.0
+0.0 0.0 0.0 0.0 1.0 0.0
+0.0 0.0 0.0 0.0 0.0 1.0
+0.97357890287316  0.228350870110656 0.0 0.0 0.0 0.0
+-0.228350870110656 0.97357890287316 0.0 0.0 0.0 0.0
+0.0 0.0  0.971134279909636 0.238533457578581 0.0 0.0
+0.0 0.0 -0.238533457578581 0.971134279909636 0.0 0.0
+0.0 0.0 0.0 0.0 1.0 0.0
+0.0 0.0 0.0 0.0 0.0 1.0
+0.97357890287316  0.228350870110656 0.0 0.0 0.0 0.0
+-0.228350870110656 0.97357890287316 0.0 0.0 0.0 0.0
+0.0 0.0  0.971134279909636 0.238533457578581 0.0 0.0
+0.0 0.0 -0.238533457578581 0.971134279909636 0.0 0.0
+0.0 0.0 0.0 0.0 1.0 0.0
+0.0 0.0 0.0 0.0 0.0 1.0
+0.895711760239413  0.444635179184927 0.0 0.0 0.0 0.0
+-0.444635179184927 0.895711760239413 0.0 0.0 0.0 0.0
+0.0 0.0  0.886203579231215 0.463296035119862 0.0 0.0
+0.0 0.0 -0.463296035119862 0.886203579231215 0.0 0.0
+0.0 0.0 0.0 0.0 1.0 0.0
+0.0 0.0 0.0 0.0 0.0 1.0
+0.895711760239413  0.444635179184927 0.0 0.0 0.0 0.0
+-0.444635179184927 0.895711760239413 0.0 0.0 0.0 0.0
+0.0 0.0  0.886203579231215 0.463296035119862 0.0 0.0
+0.0 0.0 -0.463296035119862 0.886203579231215 0.0 0.0
+0.0 0.0 0.0 0.0 1.0 0.0
+0.0 0.0 0.0 0.0 0.0 1.0
+0.97357890287316  0.228350870110656 0.0 0.0 0.0 0.0
+-0.228350870110656 0.97357890287316 0.0 0.0 0.0 0.0
+0.0 0.0  0.971134279909636 0.238533457578581 0.0 0.0
+0.0 0.0 -0.238533457578581 0.971134279909636 0.0 0.0
+0.0 0.0 0.0 0.0 1.0 0.0
+0.0 0.0 0.0 0.0 0.0 1.0
+0.97357890287316  0.228350870110656 0.0 0.0 0.0 0.0
+-0.228350870110656 0.97357890287316 0.0 0.0 0.0 0.0
+0.0 0.0  0.971134279909636 0.238533457578581 0.0 0.0
+0.0 0.0 -0.238533457578581 0.971134279909636 0.0 0.0
+0.0 0.0 0.0 0.0 1.0 0.0
+0.0 0.0 0.0 0.0 0.0 1.0
+0.895711760239413  0.444635179184927 0.0 0.0 0.0 0.0
+-0.444635179184927 0.895711760239413 0.0 0.0 0.0 0.0
+0.0 0.0  0.886203579231215 0.463296035119862 0.0 0.0
+0.0 0.0 -0.463296035119862 0.886203579231215 0.0 0.0
+0.0 0.0 0.0 0.0 1.0 0.0
+0.0 0.0 0.0 0.0 0.0 1.0
+0.895711760239413  0.444635179184927 0.0 0.0 0.0 0.0
+-0.444635179184927 0.895711760239413 0.0 0.0 0.0 0.0
+0.0 0.0  0.886203579231215 0.463296035119862 0.0 0.0
+0.0 0.0 -0.463296035119862 0.886203579231215 0.0 0.0
+0.0 0.0 0.0 0.0 1.0 0.0
+0.0 0.0 0.0 0.0 0.0 1.0
+0.97357890287316  0.228350870110656 0.0 0.0 0.0 0.0
+-0.228350870110656 0.97357890287316 0.0 0.0 0.0 0.0
+0.0 0.0  0.971134279909636 0.238533457578581 0.0 0.0
+0.0 0.0 -0.238533457578581 0.971134279909636 0.0 0.0
+0.0 0.0 0.0 0.0 1.0 0.0
+0.0 0.0 0.0 0.0 0.0 1.0
+0.97357890287316  0.228350870110656 0.0 0.0 0.0 0.0
+-0.228350870110656 0.97357890287316 0.0 0.0 0.0 0.0
+0.0 0.0  0.971134279909636 0.238533457578581 0.0 0.0
+0.0 0.0 -0.238533457578581 0.971134279909636 0.0 0.0
+0.0 0.0 0.0 0.0 1.0 0.0
+0.0 0.0 0.0 0.0 0.0 1.0
+-------------------------------------------------
+Input files: idblist1.in and idblist2.in:
+bunch id at each step of each beam.
+In this example, each line represents one collision
+point, the # in each line represents the bunch id of
+beam 1 at step j, collision i.
+------------------------------------------------
+1 0 2 0 3 0
+2 0 3 0 1 0
+0 3 0 1 0 2
+3 0 1 0 2 0
+------------------------------------------------
+Output files:
+-------------------------------------------------
+File fort.x4 (for X) fort.x5 (for Y), fort.x6 (for Z): RMS size information
+Here, x can be 2,3,4,5,6,7..., depending on the number of bunches.
+----------------------------------------------------------------
+1st col: turn
+2nd col: centroid location (m)
+3rd col: RMS size (m)
+4th col: Centroid momentum (rad)
+5th col: RMS momentum (rad)
+6th col: Twiss parameter, alpha
+7th col: normalized RMS emittance (m-rad)
+----------------------------------------------------------------
+File fort.x7: maximum amplitude information
+----------------------------------------------------------------
+1st col: turn
+2nd col: Max. X (m)
+3rd col: Max. Px (rad)
+4th col: Max. Y (m)
+5th col: Max. Py (rad)
+6th col: Max. Z (m)
+7th col: Max. delta p/p0 ()
+----------------------------------------------------------------
+File fort.x8: load balance and loss diagnostic
+----------------------------------------------------------------
+1st col: z distance (m)
+2nd col: min # of particles on a PE
+3rd col: max # of particles on a PE
+4th col: total # of particles in the bunch
+----------------------------------------------------------------
+File fort.x9: cubic root of 3rd moments of the beam distribution
+----------------------------------------------------------------
+1st col: z distance (m)
+2nd col: X (m)
+3rd col: Px (rad)
+4th col: Y (m)
+5th col: Py  (rad)
+6th col: Z (m)
+7th col: delta P/p0 ()
+----------------------------------------------------------------
+File fort.x0: square root, square root of 4th moments of the beam distribution
+----------------------------------------------------------------
+1st col: z distance (m)
+2nd col: X (m)
+3rd col: Px (rad)
+4th col: Y (m)
+5th col: Py (rad)
+6th col: Z (m)
+7th col: delta P/p0 ()
+----------------------------------------------------------------
+
